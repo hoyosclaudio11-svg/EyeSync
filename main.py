@@ -85,15 +85,11 @@ def main():
     else:
         print("[EyeSync] No pude leer la gamma actual; sigo sin tocar la pantalla.")
 
-    # 2) Detector de parpadeo
+    # 2) Detector de parpadeo (si la cámara falta, reintenta solo en segundo plano)
     det = None
     if not args.sin_camara:
         det = DetectorParpadeo(camara=args.camara, vista=args.vista)
         det.start()
-        time.sleep(1.5)
-        if det.error:
-            print(f"[EyeSync] Webcam: {det.error}. Sigo con pausas y ajuste de pantalla.")
-            det = None
 
     # 3) Registro, pausas y vigía de fatiga
     sesion_id = metricas.iniciar_sesion(miopia or 0.0)

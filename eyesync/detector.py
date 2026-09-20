@@ -94,8 +94,17 @@ class DetectorParpadeo(threading.Thread):
 
     def run(self):
         cap = self._abrir_camara()
+        espera = 0
+        while cap is None and self.activo:
+            # Cámara ausente al arrancar o recién caída: reintentar de fondo
+            self.recuperando = True
+            time.sleep(5)
+            espera += 5
+            if espera == 30:
+                self.error = "no se pudo abrir la webcam (sigo reintentando)"
+            cap = self._abrir_camara()
+        self.recuperando = False
         if cap is None:
-            self.error = "no se pudo abrir la webcam"
             return
 
         face_mesh = mp.solutions.face_mesh.FaceMesh(
