@@ -51,6 +51,8 @@ def _estado(det, recordador):
     if det is None:
         return f"[EyeSync] cámara apagada | {cola}"
     s = det.snapshot()
+    if s.get("recuperando"):
+        return f"[EyeSync] cámara caída, reconectando... | {cola}"
     ear = "--" if s["ear"] is None else f"{s['ear']:.2f}"
     rostro = "sí" if s["rostro"] else "no"
     return f"[EyeSync] EAR {ear} | {s['ppm']:2d} parp/min | rostro {rostro} | {cola}"

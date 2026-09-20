@@ -44,6 +44,7 @@ class DetectorParpadeo(threading.Thread):
 
         self.activo = True
         self.error = None
+        self.recuperando = False  # la cámara se cayó y está reintentando conectarse
         self.ear = None          # EAR actual (promedio de los dos ojos)
         self.ppm = 0             # parpadeos en los últimos 60 s
         self.rostro = False
@@ -71,6 +72,7 @@ class DetectorParpadeo(threading.Thread):
                 "ppm": self.ppm,
                 "rostro": self.rostro,
                 "umbral": self.umbral,
+                "recuperando": self.recuperando,
                 "cierres_largos": list(self._cierres_largos),
                 "entrecerrados": list(self._entrecerrados),
             }
@@ -79,15 +81,22 @@ class DetectorParpadeo(threading.Thread):
         self.activo = False
 
     # ---------- hilo de captura ----------
-    def run(self):
+    def _abrir_camara(self):
         cap = cv2.VideoCapture(self.camara, cv2.CAP_DSHOW)
         if not cap.isOpened():
             cap = cv2.VideoCapture(self.camara)
         if not cap.isOpened():
-            self.error = "no se pudo abrir la webcam"
-            return
+            cap.release()
+            return None
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        return cap
+
+    def run(self):
+        cap = self._abrir_camara()
+        if cap is None:
+            self.error = "no se pudo abrir la webcam"
+            return
 
         face_mesh = mp.solutions.face_mesh.FaceMesh(
             max_num_faces=1,
@@ -99,13 +108,33 @@ class DetectorParpadeo(threading.Thread):
         calibracion = []
         t_cierre = None
         t_entrecerrado = None
+        fallos = 0
 
         try:
             while self.activo:
                 ok, frame = cap.read()
                 if not ok:
-                    time.sleep(0.05)
+                    fallos += 1
+                    if fallos >= 90:
+                        # La cámara dejó de dar frames (se cayó del USB):
+                        # reintentar cada 5 s hasta que vuelva.
+                        self.recuperando = True
+                        cap.release()
+                        while self.activo:
+                            time.sleep(5)
+                            nuevo = self._abrir_camara()
+                            if nuevo is not None:
+                                cap = nuevo
+                                break
+                        if not self.activo:
+                            break
+                        fallos = 0
+                        self.recuperando = False
+                        calibracion = []  # recalibrar con la cámara de vuelta
+                        t_cierre = None
+                        t_entrecerrado = None
                     continue
+                fallos = 0
                 alto, ancho = frame.shape[:2]
                 res = face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 ahora = time.time()
